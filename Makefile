@@ -6,7 +6,8 @@ obj-m += low_m.o
 obj-m += hi_m.o
 
 
-cache-srcs := cache_structure.o
+cache-srcs := cache_structure.o \
+			  tcp_flow.o
 
 low_m-objs := $(lo_m_name).o \
 			  $(cache-srcs)

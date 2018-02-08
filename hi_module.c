@@ -13,66 +13,61 @@
 
 MODULE_LICENSE("GPL");
 
-
 struct nf_hook_ops bundle;
 
-struct cache *c;
+struct cache *cache;
 
 
 unsigned int hook_func(const struct nf_hook_ops *ops,
-                       struct       sk_buff *skb,
-                       const struct net_device *in,
-                       const struct net_device *out,
-                       int (*okfn)(struct sk_buff *))
+        struct       sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
-    struct iphdr *iph;          /* IPv4 header */
-    struct tcphdr *tcph;        /* TCP header */
-    
-    u16 sport, dport;           /* Source and destination ports */
-    u32 saddr, daddr;           /* Source and destination addresses */
-    
-    unsigned char *user_data;   /* TCP data begin pointer */
-    unsigned char *tail;        /* TCP data end pointer */
-    unsigned char *it;          /* TCP data iterator */
+    struct iphdr  *iph;
+    struct tcphdr *tcph;
+    u16    sport, dport;
+    u32    saddr, daddr;
+    u32    seq;
+    u16    fin;
 
-
-    if (!skb)
+    if (!skb) {
         return NF_ACCEPT;
+    }
 
-    iph = ip_hdr(skb);
+    iph   = ip_hdr(skb);
 
-    if (iph->protocol != IPPROTO_TCP)
+    if (iph->protocol != IPPROTO_TCP) {
         return NF_ACCEPT;
+    }
 
-    tcph = tcp_hdr(skb);
+    tcph  = tcp_hdr(skb);
 
     saddr = ntohl(iph->saddr);
     daddr = ntohl(iph->daddr);
     sport = ntohs(tcph->source);
     dport = ntohs(tcph->dest);
+    
+    seq   = ntohl(tcph->seq);
+    fin   = tcph->fin;
 
-    user_data = (unsigned char *)((unsigned char *)tcph + (tcph->doff * 4));
-    tail = skb_tail_pointer(skb);
-
-    if (user_data[0] != 'H' || user_data[1] != 'T' || user_data[2] != 'T' ||
-            user_data[3] != 'P') {
-        return NF_ACCEPT;
-    }
-
-    pr_debug("[High-Flow-Cache-Module]: hook_func - Route: %pI4h:%d -> %pI4h:%d\n",
-            &saddr, sport, &daddr, dport);
-
-    pr_debug("[High-Flow-Cache-Module]: hook_func - data:\n");
-    for (it = user_data; it != tail; ++it) {
-        char c = *(char *)it;
-
-        if (c == '\0')
-            break;
-
-        printk("%c", c);
-    }
-    printk("\n\n");
-
+    unsigned int  payload_size = skb->len - ip_hdrlen(skb) - tcp_hdrlen(skb);
+    unsigned char *payload = (unsigned char *)(skb->data + ip_hdrlen(skb) + tcp_hdrlen(skb));
+    unsigned char *cache_result,
+                  id;
+    
+    add_to_cache(cache,
+                 sport,
+                 saddr,
+                 dport,
+                 daddr,
+                 seq,
+                 fin,
+                 payload,
+                 payload_size,
+                 &cache_result,
+                 &id);
+    
     return NF_ACCEPT;
 }
 
@@ -80,8 +75,8 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
 int init_func(void) {
     printk("[High-Flow-Cache-Module]: init_func - Initializing new hook\n");
 
-    c = kmalloc(sizeof(struct cache), GFP_KERNEL);
-    init_cache(c, CACHE_SIZE);
+    cache = kmalloc(sizeof(struct cache), GFP_KERNEL);
+    init_cache(cache, CACHE_SIZE);
 
     bundle.hook     = hook_func;
     bundle.pf       = PF_INET;
@@ -95,13 +90,15 @@ int init_func(void) {
 
 
 void exit_func(void) {
+    print_cache_data(cache);
+    
     printk("[High-Flow-Cache-Module]: exit_func - Total hitrate: %d\n",
-           get_hitrate(c));
+           get_hitrate(cache));
     printk("[High-Flow-Cache-Module]: exit_func - Saved traffic part: %d\n",
-           get_saved_traffic_part(c));
+           get_saved_traffic_part(cache));
 
-    clean_cache(c);
-    kfree(c);
+    clean_cache(cache);
+    kfree(cache);
 
     nf_unregister_hook(&bundle);
     printk("[High-Flow-Cache-Module]: exit_func - Exit finished with code 0.\n");

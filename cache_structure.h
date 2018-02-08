@@ -2,11 +2,14 @@
 #define CACHE_STRUCTURE_H
 
 
-#define ID_LEN 1
+#include "tcp_flow.h"
+
+#define ID_LEN     1
+#define KiB        1024
+#define PERCENTAGE 100
 
 
 struct cache {
-    // DECLARE LIST
     long max_size;      // in bytes
     long curr_size;     // in bytes
     int hits;
@@ -20,13 +23,21 @@ void init_cache(struct cache *c, int cache_size);
 
 void clean_cache(struct cache *c);
 
-void add_to_cache(struct cache *c,
-                  const unsigned char *pl,
-                  int s,
-                  unsigned char **hash_val,
-                  unsigned char *id);
+void add_to_cache(struct cache *cache,
+        u16 sport,
+        u32 saddr,
+        u16 dport,
+        u32 daddr,
+        u16 seq,
+        u16 fin,
+        const unsigned char *payload,
+        int payload_size,
+        unsigned char **cache_result,
+        unsigned char *id);
 
-void __cache_del_entry(struct cache *c);
+void delete_entry_from_cache(struct cache *c);
+
+void print_cache_data(struct cache *c);
 
 int get_hitrate(struct cache *c);
 

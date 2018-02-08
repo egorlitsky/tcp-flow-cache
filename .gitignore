@@ -1,0 +1,9 @@
+*.order
+*.o
+*.symvers
+*.mod.c
+*.ko
+/nbproject
+*~
+*.cmd
+/.tmp_versions

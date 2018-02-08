@@ -54,11 +54,6 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
     user_data = (unsigned char *)((unsigned char *)tcph + (tcph->doff * 4));
     tail = skb_tail_pointer(skb);
 
-    if (user_data[0] != 'H' || user_data[1] != 'T' || user_data[2] != 'T' ||
-            user_data[3] != 'P') {
-        return NF_ACCEPT;
-    }
-
     pr_debug("[Low-Flow-Cache-Module]: hook_func - Route: %pI4h:%d -> %pI4h:%d\n",
             &saddr, sport, &daddr, dport);
 
