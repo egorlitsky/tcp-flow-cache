@@ -16,7 +16,7 @@ struct tcp_flow {
 
 struct packet {
     struct list_head list;
-    u32 sequence_number;
+    unsigned int sequence_number;
 };
 
 int get_size(struct tcp_flow *flow);

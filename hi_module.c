@@ -24,12 +24,12 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
         const struct net_device *out,
         int (*okfn)(struct sk_buff *))
 {
-    struct iphdr  *iph;
-    struct tcphdr *tcph;
-    u16    sport, dport;
-    u32    saddr, daddr;
-    u32    seq;
-    u16    fin;
+    struct       iphdr  *iph;
+    struct       tcphdr *tcph;
+    u16          sport, dport;
+    u32          saddr, daddr;
+    u16          fin;
+    unsigned int seq;
 
     if (!skb) {
         return NF_ACCEPT;
@@ -48,9 +48,9 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
     sport = ntohs(tcph->source);
     dport = ntohs(tcph->dest);
     
-    seq   = ntohl(tcph->seq);
+    seq   = (unsigned int) htonl(tcph->seq);
     fin   = tcph->fin;
-
+    
     unsigned int  payload_size = skb->len - ip_hdrlen(skb) - tcp_hdrlen(skb);
     unsigned char *payload = (unsigned char *)(skb->data + ip_hdrlen(skb) + tcp_hdrlen(skb));
     unsigned char *cache_result,
@@ -61,8 +61,8 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
                  saddr,
                  dport,
                  daddr,
-                 seq,
                  fin,
+                 seq,
                  payload,
                  payload_size,
                  &cache_result,

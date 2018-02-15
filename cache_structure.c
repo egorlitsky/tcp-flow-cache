@@ -5,16 +5,16 @@ static LIST_HEAD(list_of_flows);
 
 
 void add_to_cache(struct cache *cache,
-        u16 sport,
-        u32 saddr,
-        u16 dport,
-        u32 daddr,
-        u16 seq,
-        u16 fin,
+        u16                 sport,
+        u32                 saddr,
+        u16                 dport,
+        u32                 daddr,
+        u16                 fin,
+        unsigned int        seq,
         const unsigned char *payload,
-        int payload_size,
-        unsigned char **cache_result,
-        unsigned char *id)
+        int                 payload_size,
+        unsigned char       **cache_result,
+        unsigned char       *id)
 {
     printk("[TCP-Flow-Cache-Module]: add_to_cache - Attempt to find / add packet...\n");
     
@@ -91,7 +91,7 @@ void print_cache_data(struct cache *c) {
         
         struct packet *p;
         list_for_each_entry(p, &obj->list_of_packets, list) {
-            printk("[TCP-Flow-Cache-Module]: print_cache_data - Packet seq - %u\n", &p->sequence_number);
+            printk("[TCP-Flow-Cache-Module]: print_cache_data - Packet seq - %u\n", p->sequence_number);
         }
     }
 }
