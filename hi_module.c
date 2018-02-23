@@ -52,7 +52,9 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
     fin   = tcph->fin;
     
     unsigned int  payload_size = skb->len - ip_hdrlen(skb) - tcp_hdrlen(skb);
-    unsigned char *payload = (unsigned char *)(skb->data + ip_hdrlen(skb) + tcp_hdrlen(skb));
+    unsigned char *payload = (unsigned char *)(
+                                skb->data + ip_hdrlen(skb) + tcp_hdrlen(skb));
+    
     unsigned char *cache_result,
                   id;
     

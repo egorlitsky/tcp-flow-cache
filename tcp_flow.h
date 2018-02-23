@@ -10,6 +10,8 @@ struct tcp_flow {
     u16 sport, dport;
     u32 saddr, daddr;
     struct list_head list_of_packets;
+    unsigned char *data;
+    bool data_ready;
     int size;
     void *a_pointer;
 };
@@ -17,6 +19,8 @@ struct tcp_flow {
 struct packet {
     struct list_head list;
     unsigned int sequence_number;
+    const unsigned char *payload;
+    unsigned int payload_size;
 };
 
 int get_size(struct tcp_flow *flow);

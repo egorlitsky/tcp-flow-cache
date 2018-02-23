@@ -35,9 +35,15 @@ void add_to_cache(struct cache *cache,
         unsigned char **cache_result,
         unsigned char *id);
 
+bool find_payload(unsigned char *payload, int payload_size);
+
 void delete_entry_from_cache(struct cache *c);
 
 void print_cache_data(struct cache *c);
+
+void print_payload(const unsigned char *payload,
+        int payload_size,
+        unsigned int seq);
 
 int get_hitrate(struct cache *c);
 
