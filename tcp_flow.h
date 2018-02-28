@@ -23,6 +23,12 @@ struct packet {
     unsigned int payload_size;
 };
 
+struct hit_data {
+    int flow_index;
+    int data_offset;
+    int data_size;
+};
+
 int get_size(struct tcp_flow *flow);
 
 void add_packet_to_flow(struct list_head *new, struct list_head *head);

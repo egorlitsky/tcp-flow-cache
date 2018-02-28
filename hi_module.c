@@ -55,20 +55,24 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
     unsigned char *payload = (unsigned char *)(
                                 skb->data + ip_hdrlen(skb) + tcp_hdrlen(skb));
     
-    unsigned char *cache_result,
-                  id;
+    if (payload_size > 0) {
+        struct hit_data* cache_result;
+        cache_result = add_to_cache(cache,
+                     sport,
+                     saddr,
+                     dport,
+                     daddr,
+                     fin,
+                     seq,
+                     payload,
+                     payload_size);
     
-    add_to_cache(cache,
-                 sport,
-                 saddr,
-                 dport,
-                 daddr,
-                 fin,
-                 seq,
-                 payload,
-                 payload_size,
-                 &cache_result,
-                 &id);
+        if (cache_result->flow_index != NOT_FOUND) {
+
+            // TODO: segment processing
+
+        }
+    }
     
     return NF_ACCEPT;
 }

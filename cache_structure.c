@@ -5,7 +5,7 @@
 static LIST_HEAD(list_of_flows);
 
 
-void add_to_cache(struct cache *cache,
+struct hit_data* add_to_cache(struct cache *cache,
         u16                 sport,
         u32                 saddr,
         u16                 dport,
@@ -13,18 +13,19 @@ void add_to_cache(struct cache *cache,
         u16                 fin,
         unsigned int        seq,
         const unsigned char *payload,
-        int                 payload_size,
-        unsigned char       **cache_result,
-        unsigned char       *id)
+        int                 payload_size)
 {
-    bool search_result = find_payload(payload, payload_size);
+    struct hit_data* search_result;
+    search_result = find_payload(payload, payload_size);
     
-    if (search_result) {
+    if (search_result->data_offset != NOT_FOUND) {
         
-        // TODO: increase counters, return HitData
+        ++cache->hits;
         
     } else {
         
+        ++cache->misses;
+
         printk("[TCP-Flow-Cache-Module]: add_to_cache - Attempt to add packet...\n");
         
         bool flow_found = false;
@@ -45,8 +46,9 @@ void add_to_cache(struct cache *cache,
                 add_packet_to_flow(&segment->list, &obj->list_of_packets);
                 obj->size += payload_size;
 
-                // flow is closed, we can build common string with all segments
-                if (fin) {
+                // TODO: decide, use FIN or not
+                // if (fin) {
+                if (obj->size) {
                     obj->data = kmalloc(obj->size, GFP_KERNEL);
                     printk("[TCP-Flow-Cache-Module]: add_to_cache - Memory is allocated for flow data\n");
 
@@ -86,31 +88,89 @@ void add_to_cache(struct cache *cache,
             add_packet_to_flow(&segment->list, &flow->list_of_packets);
             flow->size += payload_size;
 
-            printk("[TCP-Flow-Cache-Module]: add_to_cache - New flow created!.\n");
+            printk("[TCP-Flow-Cache-Module]: add_to_cache - New flow created.\n");
         }
 
         printk("[TCP-Flow-Cache-Module]: add_to_cache - FIN = %d\n", fin);
     }
+
+    return search_result;
 }
 
-bool find_payload(unsigned char *payload, int payload_size) {
+unsigned char* u_strstr(unsigned char *string, unsigned char *pattern)
+{
+    int i, j;
+    int flag = 0;
+
+    if ((string == NULL || pattern == NULL)) {
+        return NULL;
+    }
+
+    for( i = 0; string[i] != '\0'; ++i) {
+        if (string[i] == pattern[0]) {
+
+            for (j = i; ; j++) {
+                if (pattern[j - i] == '\0') {
+                    flag = 1; break;
+                }
+
+                if (string[j] == pattern[j - i]) {
+                    continue;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        if (flag == 1) {
+            break;
+        }
+    }
+
+    if (flag) {
+        return (string + i);
+    } else {
+        return NULL;
+    }
+}
+
+struct hit_data* find_payload(unsigned char *payload, int payload_size) {
+    struct list_head *fl;
+    struct hit_data  *h_data;
+    unsigned char    *result;
+
+    int flow_index =  0;
+    int offset     =  NOT_FOUND;
     
     printk("[TCP-Flow-Cache-Module]: find_payload - Searching segment...\n");
     
-    struct list_head *fl;
     list_for_each(fl, &list_of_flows) {
         struct tcp_flow *flow = list_entry(fl, struct tcp_flow, list);
-        
-        // search just in ready (finished) TCP flows
+
+        // search just in ready TCP flows
         if (flow->data_ready) {
-            if (strstr((char*) flow->data, (char*) payload) != NULL) {
+            result = u_strstr(flow->data, payload);
+
+            if (result) {
+                offset = result - flow->data;
                 printk("[TCP-Flow-Cache-Module]: find_payload - The segment has been found in cache!\n");
-                return true;
+                printk("[TCP-Flow-Cache-Module]: find_payload - Flow: %d, offset: %d\n", flow_index, offset);
+
+                h_data = kmalloc(sizeof(*h_data), GFP_KERNEL);
+                h_data->flow_index  = flow_index;
+                h_data->data_offset = offset;
+                h_data->data_size   = payload_size;
+                return h_data;
             }
         }
+        ++flow_index;
     }
     
-    return false;
+    h_data = kmalloc(sizeof(*h_data), GFP_KERNEL);
+    h_data->flow_index  = NOT_FOUND;
+    h_data->data_offset = NOT_FOUND;
+    h_data->data_size   = NOT_FOUND;
+    return h_data;
 }
 
 void delete_entry_from_cache(struct cache *c) {
@@ -158,7 +218,7 @@ void print_payload(const unsigned char *payload,
     
     printk("[TCP-Flow-Cache-Module]: print_payload - Printing payload of segment %u:\n\n", seq);
     
-    int  i = 0;
+    int  i;
     for (i = 0; i < payload_size; ++i) {
         char c = (char) payload[i];
 

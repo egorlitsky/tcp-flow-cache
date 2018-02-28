@@ -65,9 +65,7 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
                  fin,
                  seq,
                  payload,
-                 payload_size,
-                 &cache_result,
-                 &id);
+                 payload_size);
     
     return NF_ACCEPT;
 }

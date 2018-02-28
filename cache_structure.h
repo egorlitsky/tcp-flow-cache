@@ -4,9 +4,9 @@
 
 #include "tcp_flow.h"
 
-#define ID_LEN     1
 #define KiB        1024
 #define PERCENTAGE 100
+#define NOT_FOUND  -1
 
 
 struct cache {
@@ -23,7 +23,7 @@ void init_cache(struct cache *c, int cache_size);
 
 void clean_cache(struct cache *c);
 
-void add_to_cache(struct cache *cache,
+struct hit_data* add_to_cache(struct cache *cache,
         u16 sport,
         u32 saddr,
         u16 dport,
@@ -31,11 +31,11 @@ void add_to_cache(struct cache *cache,
         u16 fin,
         unsigned int seq,
         const unsigned char *payload,
-        int payload_size,
-        unsigned char **cache_result,
-        unsigned char *id);
+        int payload_size);
 
-bool find_payload(unsigned char *payload, int payload_size);
+unsigned char* u_strstr(unsigned char *string, unsigned char *pattern);
+
+struct hit_data* find_payload(unsigned char *payload, int payload_size);
 
 void delete_entry_from_cache(struct cache *c);
 
