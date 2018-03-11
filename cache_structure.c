@@ -20,10 +20,12 @@ struct hit_data* add_to_cache(struct cache *cache,
     
     if (search_result->data_offset != NOT_FOUND) {
         
+        // TODO: increase traffic part
         ++cache->hits;
         
     } else {
         
+        // TODO: increase traffic part
         ++cache->misses;
 
         printk("[TCP-Flow-Cache-Module]: add_to_cache - Attempt to add packet...\n");
@@ -38,36 +40,18 @@ struct hit_data* add_to_cache(struct cache *cache,
                 flow_found = true;
                 printk("[TCP-Flow-Cache-Module]: add_to_cache - An existing flow has been found\n");
                 
-                struct packet *segment = kmalloc(sizeof(*segment), GFP_KERNEL);
+                struct packet *segment = kmalloc(sizeof(struct packet), GFP_KERNEL);
                 segment->sequence_number = seq;
                 segment->payload = payload;
                 segment->payload_size = payload_size;
 
                 add_packet_to_flow(&segment->list, &obj->list_of_packets);
                 obj->size += payload_size;
-
-                // TODO: decide, use FIN or not
-                // if (fin) {
-                if (obj->size) {
-                    obj->data = kmalloc(obj->size, GFP_KERNEL);
-                    printk("[TCP-Flow-Cache-Module]: add_to_cache - Memory is allocated for flow data\n");
-
-                    int next_segment_offset = 0;
-                    struct packet *p;
-                    
-                    list_for_each_entry(p, &obj->list_of_packets, list) {
-                        memcpy(obj->data + next_segment_offset, p->payload, p->payload_size);
-                        next_segment_offset += p->payload_size;
-                    }
-
-                    obj->data_ready = true;
-                    printk("[TCP-Flow-Cache-Module]: add_to_cache - Flow is ready.\n");
-                }
             }
         }
 
         if (!flow_found) {
-            struct tcp_flow *flow = kmalloc(sizeof(*flow), GFP_KERNEL);
+            struct tcp_flow *flow = kmalloc(sizeof(struct tcp_flow), GFP_KERNEL);
             flow->saddr = saddr;
             flow->daddr = daddr;
             flow->sport = sport;
@@ -80,7 +64,7 @@ struct hit_data* add_to_cache(struct cache *cache,
 
             INIT_LIST_HEAD(&flow->list_of_packets);
 
-            struct packet *segment = kmalloc(sizeof(*segment), GFP_KERNEL);
+            struct packet *segment = kmalloc(sizeof(struct packet), GFP_KERNEL);
             segment->sequence_number = seq;
             segment->payload = payload;
             segment->payload_size = payload_size;
@@ -97,47 +81,82 @@ struct hit_data* add_to_cache(struct cache *cache,
     return search_result;
 }
 
-unsigned char* u_strstr(unsigned char *string, unsigned char *pattern)
+int u_strstr(struct tcp_flow *flow, unsigned char *payload, int payload_size)
 {
-    int i, j;
-    int flag = 0;
-
-    if ((string == NULL || pattern == NULL)) {
-        return NULL;
+    if (flow->size == 0 || payload == NULL || payload_size <= 0) {
+        return NOT_FOUND;
     }
 
-    for( i = 0; string[i] != '\0'; ++i) {
-        if (string[i] == pattern[0]) {
-
-            for (j = i; ; j++) {
-                if (pattern[j - i] == '\0') {
-                    flag = 1; break;
+    int  i                    =  0;
+    int  j                    =  0;
+    int  payload_index        =  0;
+    int  offset               =  0;
+    int  current_packet_index =  0;
+    int  found_packet_index   =  0;
+    bool found                =  false;
+    bool compares             =  false;
+    
+    struct packet *p;
+    list_for_each_entry(p, &flow->list_of_packets, list) {
+        for (i = 0; i < p->payload_size; ++i) {
+            if ((!compares && p->payload[i] == payload[0]) || compares) {
+                compares = true;
+                
+                for (j = i; j < p->payload_size; ++j) {
+                    if (p->payload[j] == payload[payload_index]) {
+                        compares = true;
+                        payload_index++;
+                        
+                        if (payload_index == payload_size) {
+                            found              = true;
+                            offset             = j + 1;
+                            found_packet_index = current_packet_index;                            
+                            break;
+                        }
+                        continue;
+                        
+                    } else {
+                        payload_index = 0;
+                        compares      = false;
+                    }
                 }
-
-                if (string[j] == pattern[j - i]) {
-                    continue;
-                } else {
+                if (compares) {
                     break;
                 }
             }
+            if (found) {
+                break;
+            }
         }
-
-        if (flag == 1) {
+        if (found) {
             break;
         }
+        
+        ++current_packet_index;
     }
-
-    if (flag) {
-        return (string + i);
+    
+    if (found) {
+        current_packet_index = 0;
+        list_for_each_entry(p, &flow->list_of_packets, list) {
+            if (current_packet_index == found_packet_index) {
+                break;
+            } else {
+                offset += p->payload_size;
+            }
+            
+            ++current_packet_index;
+        }
+        
+        offset -= payload_size;
+        return offset;
     } else {
-        return NULL;
+        return NOT_FOUND;
     }
 }
 
 struct hit_data* find_payload(unsigned char *payload, int payload_size) {
     struct list_head *fl;
     struct hit_data  *h_data;
-    unsigned char    *result;
 
     int flow_index =  0;
     int offset     =  NOT_FOUND;
@@ -147,16 +166,15 @@ struct hit_data* find_payload(unsigned char *payload, int payload_size) {
     list_for_each(fl, &list_of_flows) {
         struct tcp_flow *flow = list_entry(fl, struct tcp_flow, list);
 
-        // search just in ready TCP flows
-        if (flow->data_ready) {
-            result = u_strstr(flow->data, payload);
+        // search just in TCP flows having the data
+        if (flow->size > 0) {
+            offset = u_strstr(flow, payload, payload_size);
 
-            if (result) {
-                offset = result - flow->data;
+            if (offset != NOT_FOUND) {
                 printk("[TCP-Flow-Cache-Module]: find_payload - The segment has been found in cache!\n");
                 printk("[TCP-Flow-Cache-Module]: find_payload - Flow: %d, offset: %d\n", flow_index, offset);
 
-                h_data = kmalloc(sizeof(*h_data), GFP_KERNEL);
+                h_data = kmalloc(sizeof(struct hit_data), GFP_KERNEL);
                 h_data->flow_index  = flow_index;
                 h_data->data_offset = offset;
                 h_data->data_size   = payload_size;
@@ -166,7 +184,7 @@ struct hit_data* find_payload(unsigned char *payload, int payload_size) {
         ++flow_index;
     }
     
-    h_data = kmalloc(sizeof(*h_data), GFP_KERNEL);
+    h_data = kmalloc(sizeof(struct hit_data), GFP_KERNEL);
     h_data->flow_index  = NOT_FOUND;
     h_data->data_offset = NOT_FOUND;
     h_data->data_size   = NOT_FOUND;
@@ -174,6 +192,7 @@ struct hit_data* find_payload(unsigned char *payload, int payload_size) {
 }
 
 void delete_entry_from_cache(struct cache *c) {
+    // TODO: implement
     printk("[TCP-Flow-Cache-Module]: delete_entry_from_cache - Removing cache entry...\n");
 }
 
@@ -194,6 +213,7 @@ void clean_cache(struct cache *c) {
     c->misses             = 0;
     c->saved_traffic_size = 0;
     c->total_traffic_size = 0;
+    // TODO: clear list of flows and lists of packets
     printk("[TCP-Flow-Cache-Module]: clean_cache - Cache is cleared\n");
 }
 
@@ -221,9 +241,6 @@ void print_payload(const unsigned char *payload,
     int  i;
     for (i = 0; i < payload_size; ++i) {
         char c = (char) payload[i];
-
-        if (c == '\0')
-            break;
 
         char wiresharkChar = c >= ' ' && c < 0x7f ? c : '.';
 

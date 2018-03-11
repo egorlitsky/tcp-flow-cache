@@ -9,7 +9,8 @@
 #include "cache_structure.h"
 
 
-#define CACHE_SIZE 256
+#define CACHE_SIZE        256
+#define HIT_DATA_LENGTH   10
 
 MODULE_LICENSE("GPL");
 
@@ -17,6 +18,10 @@ struct nf_hook_ops bundle;
 
 struct cache *cache;
 
+void replace_payload(unsigned char *payload, const unsigned char *hit_data) {
+    memcpy(payload, hit_data, HIT_DATA_LENGTH);
+    // TODO: decide about RES bits
+}
 
 unsigned int hook_func(const struct nf_hook_ops *ops,
         struct       sk_buff *skb,
@@ -68,10 +73,25 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
                      payload_size);
     
         if (cache_result->flow_index != NOT_FOUND) {
-
-            // TODO: segment processing
-
+            
+            // TODO: decide about RES bits, choose a format of hit_data
+            
+            /*
+            skb_trim(skb, ip_hdrlen(skb) + tcp_hdrlen(skb) + HIT_DATA_LENGTH);
+            iph->tot_len = htons((unsigned short)skb->len);
+            unsigned char data[] = {7, 7, 7, 7, 7, 7, 7, 7, 7, 7};
+            replace_payload(payload, data);
+            tcph->check = htons(0);
+            int len = skb->len - ip_hdrlen(skb);
+            tcph->check = tcp_v4_check(len,
+                                       iph->saddr,
+                                       iph->daddr,
+                                       csum_partial((char*)tcph, len, 0));
+            iph->check = htons(0);
+            iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
+            */
         }
+        kfree(cache_result);
     }
     
     return NF_ACCEPT;
