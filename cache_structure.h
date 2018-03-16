@@ -3,10 +3,10 @@
 
 
 #include "tcp_flow.h"
+#include "cache_utilities.h"
 
 #define KiB        1024
 #define PERCENTAGE 100
-#define NOT_FOUND  -1
 
 
 struct cache {
@@ -28,7 +28,6 @@ struct hit_data* add_to_cache(struct cache *cache,
         u32 saddr,
         u16 dport,
         u32 daddr,
-        u16 fin,
         unsigned int seq,
         const unsigned char *payload,
         int payload_size);
@@ -36,6 +35,9 @@ struct hit_data* add_to_cache(struct cache *cache,
 int u_strstr(struct tcp_flow *flow, unsigned char *payload, int payload_size);
 
 struct hit_data* find_payload(unsigned char *payload, int payload_size);
+
+void restore_payload(unsigned char *payload, int flow_index, int data_offset,
+        int data_size);
 
 void delete_entry_from_cache(struct cache *c);
 

@@ -11,7 +11,6 @@ struct tcp_flow {
     u32 saddr, daddr;
     struct list_head list_of_packets;
     unsigned char *data;
-    bool data_ready;
     int size;
     void *a_pointer;
 };
