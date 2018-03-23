@@ -48,6 +48,10 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
     sport = ntohs(tcph->source);
     dport = ntohs(tcph->dest);
     
+    if (sport == HTTPS_PORT_NUMBER) {
+        return NF_ACCEPT;
+    }
+
     seq   = (unsigned int) htonl(tcph->seq);
 
     unsigned int  payload_size = skb->len - ip_hdrlen(skb) - tcp_hdrlen(skb);
@@ -113,9 +117,16 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
 
             iph->check = htons(0);
             iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
+
+            cache->hits++;
+            cache->saved_traffic_size += data_size;
+            cache->total_traffic_size += data_size;
+
+        } else {
+            printk("[Low-Flow-Cache] [ERROR]: hook_func - Cannot expand skb!\n");
         }
 
-    } else {
+    } else if (payload_size > 0) {
         add_to_cache(cache,
              sport,
              saddr,
@@ -134,7 +145,7 @@ int init_func(void) {
     printk("[Low-Flow-Cache] [INFO]: init_func - Initializing new hook\n");
 
     cache = kmalloc(sizeof(struct cache), GFP_KERNEL);
-    init_cache(cache, CACHE_SIZE);
+    init_cache(cache, CACHE_SIZE, true);
 
     bundle.hook     = hook_func;
     bundle.pf       = PF_INET;

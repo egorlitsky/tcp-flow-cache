@@ -10,6 +10,7 @@
 
 
 struct cache {
+    bool is_low_cache;
     long max_size;      // in bytes
     long curr_size;     // in bytes
     int hits;
@@ -19,7 +20,7 @@ struct cache {
 };
 
 // cache_size in MB
-void init_cache(struct cache *c, int cache_size);
+void init_cache(struct cache *c, int cache_size, bool is_low_cache);
 
 void clean_cache(struct cache *c);
 

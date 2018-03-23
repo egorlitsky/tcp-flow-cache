@@ -17,6 +17,8 @@ struct nf_hook_ops bundle;
 
 struct cache *cache;
 
+long low_node_ip[] = {192, 168, 56, 148};
+
 
 unsigned int hook_func(const struct nf_hook_ops *ops,
         struct       sk_buff *skb,
@@ -50,10 +52,19 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
     seq   = (unsigned int) htonl(tcph->seq);
     
     unsigned int  payload_size = skb->len - ip_hdrlen(skb) - tcp_hdrlen(skb);
+
+    if (payload_size == 0 || sport == HTTPS_PORT_NUMBER) {
+        return NF_ACCEPT;
+    }
+
     unsigned char *payload     = (unsigned char *)
                                  (skb->data + ip_hdrlen(skb) + tcp_hdrlen(skb));
     
-    if (payload_size > 0) {
+    if (ntohl(iph->daddr)  >> 24              == low_node_ip[0] &&
+       ((ntohl(iph->daddr) >> 16) & 0x00FF)   == low_node_ip[1] &&
+       ((ntohl(iph->daddr) >> 8)  & 0x0000FF) == low_node_ip[2] &&
+       ((ntohl(iph->daddr)) & 0x000000FF)     == low_node_ip[3]) {
+
         struct hit_data* cache_result;
         cache_result = add_to_cache(cache,
                      sport,
@@ -103,7 +114,7 @@ int init_func(void) {
     printk("[High-Flow-Cache] [INFO]: init_func - Initializing new hook\n");
 
     cache = kmalloc(sizeof(struct cache), GFP_KERNEL);
-    init_cache(cache, CACHE_SIZE);
+    init_cache(cache, CACHE_SIZE, false);
 
     bundle.hook     = hook_func;
     bundle.pf       = PF_INET;

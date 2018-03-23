@@ -8,6 +8,7 @@
 #define HIT_DATA_LENGTH   25
 #define IS_HIT            1
 #define HIT_FLAG_BITNUM   1
+#define HTTPS_PORT_NUMBER 443
 
 char *__strtok(char * str, const char * delim);
 
