@@ -31,6 +31,10 @@ struct hit_data* add_to_cache(struct cache *cache,
         cache->total_traffic_size += payload_size;
     } else {
         
+        while (cache->curr_size + payload_size > cache->max_size) {
+            delete_entry_from_cache(cache);
+        }
+
         cache->misses++;
         cache->total_traffic_size += payload_size;
 
@@ -46,13 +50,15 @@ struct hit_data* add_to_cache(struct cache *cache,
                 flow_found = true;
                 printk("[TCP-Flow-Cache] [INFO]: add_to_cache - An existing flow has been found\n");
                 
-                struct packet *segment = kmalloc(sizeof(struct packet), GFP_KERNEL);
+                struct packet *segment   = kmalloc(sizeof(struct packet), GFP_KERNEL);
                 segment->sequence_number = seq;
-                segment->payload = payload;
-                segment->payload_size = payload_size;
+                segment->payload         = kmalloc(payload_size, GFP_KERNEL);
+                memcpy(segment->payload, payload, payload_size);
+                segment->payload_size    = payload_size;
 
                 add_packet_to_flow(&segment->list, &obj->list_of_packets);
-                obj->size += payload_size;
+                obj->size        += payload_size;
+                cache->curr_size += payload_size;
             }
         }
 
@@ -63,19 +69,22 @@ struct hit_data* add_to_cache(struct cache *cache,
             flow->sport = sport;
             flow->dport = dport;
             flow->size  = 0;
+            flow->freq  = 0;
 
             flow->a_pointer = current;
             list_add(&flow->list, &list_of_flows);
 
             INIT_LIST_HEAD(&flow->list_of_packets);
 
-            struct packet *segment = kmalloc(sizeof(struct packet), GFP_KERNEL);
+            struct packet *segment   = kmalloc(sizeof(struct packet), GFP_KERNEL);
             segment->sequence_number = seq;
-            segment->payload = payload;
-            segment->payload_size = payload_size;
+            segment->payload         = kmalloc(payload_size, GFP_KERNEL);
+            memcpy(segment->payload, payload, payload_size);
+            segment->payload_size    = payload_size;
             
             add_packet_to_flow(&segment->list, &flow->list_of_packets);
-            flow->size += payload_size;
+            flow->size       += payload_size;
+            cache->curr_size += payload_size;
 
             printk("[TCP-Flow-Cache] [INFO]: add_to_cache - New flow created.\n");
         }
@@ -157,7 +166,7 @@ int u_strstr(struct tcp_flow *flow, unsigned char *payload, int payload_size)
     }
 }
 
-struct hit_data* find_payload(unsigned char *payload, int payload_size) {
+struct hit_data* find_payload(const unsigned char *payload, int payload_size) {
     struct list_head *fl;
     struct hit_data  *h_data;
 
@@ -177,6 +186,9 @@ struct hit_data* find_payload(unsigned char *payload, int payload_size) {
                 printk("[TCP-Flow-Cache] [INFO]: find_payload - The segment has been found in cache!\n");
                 printk("[TCP-Flow-Cache] [INFO]: find_payload - Flow: %d, offset: %d\n", flow_index, offset);
 
+                // increase LFU frequence for cache item (flow)
+                flow->freq++;
+
                 h_data = kmalloc(sizeof(struct hit_data), GFP_KERNEL);
                 h_data->flow_index  = flow_index;
                 h_data->data_offset = offset;
@@ -194,7 +206,7 @@ struct hit_data* find_payload(unsigned char *payload, int payload_size) {
     return h_data;
 }
 
-void restore_payload(unsigned char *payload, int flow_index, int data_offset,
+void restore_payload(unsigned char **payload, int flow_index, int data_offset,
         int data_size) {
 
     int    i;
@@ -217,19 +229,21 @@ void restore_payload(unsigned char *payload, int flow_index, int data_offset,
                 break;
             }
 
-            unsigned char new_payload[data_size];
+            flow->freq++;
+            unsigned char *new_payload = kmalloc(data_size, GFP_KERNEL);
+
             struct packet *p;
             list_for_each_entry(p, &flow->list_of_packets, list) {
                 for (i = 0; i < p->payload_size; ++i) {
                     if (flow_offset >= data_offset && flow_offset < (data_offset + data_size)) {
-                        new_payload[new_payload_index] = p->payload[i];
+                        new_payload[new_payload_index] = (unsigned char) p->payload[i];
                         ++new_payload_index;
                     }
                     ++flow_offset;
 
                     if (new_payload_index && flow_offset == (data_size + data_offset)) {
                         data_ready = true;
-                        replace_payload(payload, new_payload, data_size);
+                        *payload = new_payload;
                         break;
                     }
                 }
@@ -251,9 +265,56 @@ void restore_payload(unsigned char *payload, int flow_index, int data_offset,
     }
 }
 
-void delete_entry_from_cache(struct cache *c) {
-    // TODO: implement
-    printk("[TCP-Flow-Cache] [INFO]: delete_entry_from_cache - Removing cache entry...\n");
+void delete_entry_from_cache(struct cache *cache) {
+    struct list_head *i;
+    struct tcp_flow  *current_flow, *next_flow;
+    struct packet    *packet, *next_packet;
+    int               min_frequency;
+    int               flow_to_remove_index;
+    int               flow_index;
+
+    flow_index           = 0;
+    flow_to_remove_index = 0;
+    min_frequency        = 0;
+
+    list_for_each(i, &list_of_flows) {
+        struct tcp_flow *flow = list_entry(i, struct tcp_flow, list);
+
+        if (flow_index == 0) {
+            min_frequency = flow->freq;
+        }
+
+        if (flow->freq < min_frequency) {
+            min_frequency        = flow->freq;
+            flow_to_remove_index = flow_index;
+        }
+
+        flow_index++;
+    }
+
+    flow_index = 0;
+    list_for_each_entry_safe(current_flow, next_flow, &list_of_flows, list) {
+        if (flow_index == flow_to_remove_index) {
+
+            printk("[TCP-Flow-Cache] [INFO]: delete_entry_from_cache - Removing Flow %d"
+                    " with freq %d...\n", flow_index, min_frequency);
+
+            list_for_each_entry_safe(packet, next_packet, &current_flow->list_of_packets, list) {
+                kfree(packet->payload);
+                list_del(&packet->list);
+                kfree(packet);
+            }
+
+            cache->curr_size -= current_flow->size;
+            list_del(&current_flow->list);
+            kfree(current_flow);
+
+            printk("[TCP-Flow-Cache] [INFO]: delete_entry_from_cache - Removed Flow %d"
+                    " with freq %d.\n", flow_index, min_frequency);
+            break;
+        }
+        flow_index++;
+    }
 }
 
 void init_cache(struct cache *c, int cache_size, bool is_low_cache) {
@@ -269,12 +330,29 @@ void init_cache(struct cache *c, int cache_size, bool is_low_cache) {
 }
 
 void clean_cache(struct cache *c) {
+    struct tcp_flow *flow,   *next_flow;
+    struct packet   *packet, *next_packet;
+
+    printk("[TCP-Flow-Cache] [INFO]: clean_cache - Clearing the cache...\n");
+
+    list_for_each_entry_safe(flow, next_flow, &list_of_flows, list) {
+
+        list_for_each_entry_safe(packet, next_packet, &flow->list_of_packets, list) {
+            kfree(packet->payload);
+            list_del(&packet->list);
+            kfree(packet);
+        }
+
+        list_del(&flow->list);
+        kfree(flow);
+    }
+
     c->curr_size          = 0;
     c->hits               = 0;
     c->misses             = 0;
     c->saved_traffic_size = 0;
     c->total_traffic_size = 0;
-    // TODO: clear list of flows and lists of packets
+
     printk("[TCP-Flow-Cache] [INFO]: clean_cache - Cache is cleared\n");
 }
 
@@ -285,12 +363,14 @@ void print_cache_data(struct cache *c) {
     flow_index = 0;
     list_for_each(i, &list_of_flows) {
         struct tcp_flow *obj = list_entry(i, struct tcp_flow, list);
-        printk("\n[TCP-Flow-Cache] [INFO]: print_cache_data - Flow %d - %pI4h:%d -> %pI4h:%d. Size: %d\n",
-                flow_index, &obj->saddr, obj->sport, &obj->daddr, obj->dport, obj->size);
+        printk("\n[TCP-Flow-Cache] [INFO]: print_cache_data - Flow %d - "
+                "%pI4h:%d -> %pI4h:%d. Size: %d\n", flow_index,
+                &obj->saddr, obj->sport, &obj->daddr, obj->dport, obj->size);
         
         struct packet *p;
         list_for_each_entry(p, &obj->list_of_packets, list) {
-            printk("[TCP-Flow-Cache] [INFO]: print_cache_data - Segment seq - %u\n", p->sequence_number);
+            printk("[TCP-Flow-Cache] [INFO]: print_cache_data - Segment seq - "
+                    "%u, Size: %d\n", p->sequence_number, p->payload_size);
             //print_payload(p->payload, p->payload_size, p->sequence_number);
         }
         ++flow_index;

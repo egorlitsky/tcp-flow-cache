@@ -9,7 +9,7 @@
 #include "cache_structure.h"
 
 
-#define CACHE_SIZE        256
+#define CACHE_SIZE 256
 
 MODULE_LICENSE("GPL");
 
@@ -60,6 +60,14 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
     unsigned char *payload     = (unsigned char *)
                                  (skb->data + ip_hdrlen(skb) + tcp_hdrlen(skb));
     
+    if (payload_size >= HTTP_HEADER_FLAG_LENGTH &&
+            (payload[0] == 'H' ||
+             payload[1] == 'T' ||
+             payload[2] == 'T' ||
+             payload[3] == 'P' )) {
+        return NF_ACCEPT;
+    }
+
     if (ntohl(iph->daddr)  >> 24              == low_node_ip[0] &&
        ((ntohl(iph->daddr) >> 16) & 0x00FF)   == low_node_ip[1] &&
        ((ntohl(iph->daddr) >> 8)  & 0x0000FF) == low_node_ip[2] &&
@@ -74,16 +82,16 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
                      seq,
                      payload,
                      payload_size);
-    
+
         if (cache_result->flow_index != NOT_FOUND) {
-            
+
             unsigned char hit_data[HIT_DATA_LENGTH];
 
             snprintf((char*)hit_data, sizeof(hit_data), "%d %d %d",
                     cache_result->flow_index,
                     cache_result->data_offset,
                     cache_result->data_size);
-            
+
             printk("[High-Flow-Cache] [INFO]: hook_func - Hit data: %s\n", hit_data);
 
             skb_trim(skb, ip_hdrlen(skb) + tcp_hdrlen(skb) + HIT_DATA_LENGTH);

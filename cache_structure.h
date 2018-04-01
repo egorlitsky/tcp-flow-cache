@@ -35,9 +35,9 @@ struct hit_data* add_to_cache(struct cache *cache,
 
 int u_strstr(struct tcp_flow *flow, unsigned char *payload, int payload_size);
 
-struct hit_data* find_payload(unsigned char *payload, int payload_size);
+struct hit_data* find_payload(const unsigned char *payload, int payload_size);
 
-void restore_payload(unsigned char *payload, int flow_index, int data_offset,
+void restore_payload(unsigned char **payload, int flow_index, int data_offset,
         int data_size);
 
 void delete_entry_from_cache(struct cache *c);

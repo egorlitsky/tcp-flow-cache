@@ -10,8 +10,8 @@ struct tcp_flow {
     u16 sport, dport;
     u32 saddr, daddr;
     struct list_head list_of_packets;
-    unsigned char *data;
     int size;
+    int freq;
     void *a_pointer;
 };
 

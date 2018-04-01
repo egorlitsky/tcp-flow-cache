@@ -107,7 +107,9 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
             payload = (unsigned char *)(
                     skb->data + ip_hdrlen(skb) + tcp_hdrlen(skb));
 
-            restore_payload(payload, flow_index, data_offset, data_size);
+            unsigned char *cached_payload;
+            restore_payload(&cached_payload, flow_index, data_offset, data_size);
+            replace_payload(payload, cached_payload, data_size);
 
             tcph->check = htons(0);
             int len = skb->len - ip_hdrlen(skb);
@@ -127,6 +129,14 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
         }
 
     } else if (payload_size > 0) {
+        if (payload_size >= HTTP_HEADER_FLAG_LENGTH &&
+                (payload[0] == 'H' ||
+                 payload[1] == 'T' ||
+                 payload[2] == 'T' ||
+                 payload[3] == 'P' )) {
+            return NF_ACCEPT;
+        }
+
         add_to_cache(cache,
              sport,
              saddr,
