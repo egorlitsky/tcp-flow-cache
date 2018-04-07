@@ -20,17 +20,17 @@ struct cache *cache;
 long low_node_ip[] = {192, 168, 56, 148};
 
 
-unsigned int hook_func(const struct nf_hook_ops *ops,
-        struct       sk_buff *skb,
-        const struct net_device *in,
-        const struct net_device *out,
-        int (*okfn)(struct sk_buff *))
-{
-    struct       iphdr  *iph;
-    struct       tcphdr *tcph;
-    u16          sport, dport;
-    u32          saddr, daddr;
-    unsigned int seq;
+unsigned int hook_func(void *priv,
+        struct sk_buff *skb,
+        const struct nf_hook_state *state) {
+
+    struct        iphdr  *iph;
+    struct        tcphdr *tcph;
+    u16           sport, dport;
+    u32           saddr, daddr;
+    unsigned int  seq;
+    unsigned int  payload_size;
+    unsigned char *payload;
 
     if (!skb) {
         return NF_ACCEPT;
@@ -44,21 +44,18 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
 
     tcph  = tcp_hdr(skb);
 
-    saddr = ntohl(iph->saddr);
-    daddr = ntohl(iph->daddr);
-    sport = ntohs(tcph->source);
-    dport = ntohs(tcph->dest);
-    
-    seq   = (unsigned int) htonl(tcph->seq);
-    
-    unsigned int  payload_size = skb->len - ip_hdrlen(skb) - tcp_hdrlen(skb);
+    saddr        = ntohl(iph->saddr);
+    daddr        = ntohl(iph->daddr);
+    sport        = ntohs(tcph->source);
+    dport        = ntohs(tcph->dest);
+    seq          = (unsigned int) htonl(tcph->seq);
+    payload_size = skb->len - ip_hdrlen(skb) - tcp_hdrlen(skb);
 
     if (payload_size == 0 || sport == HTTPS_PORT_NUMBER) {
         return NF_ACCEPT;
     }
 
-    unsigned char *payload     = (unsigned char *)
-                                 (skb->data + ip_hdrlen(skb) + tcp_hdrlen(skb));
+    payload = (unsigned char *) (skb->data + ip_hdrlen(skb) + tcp_hdrlen(skb));
     
     if (payload_size >= HTTP_HEADER_FLAG_LENGTH &&
             (payload[0] == 'H' ||
@@ -84,7 +81,7 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
                      payload_size);
 
         if (cache_result->flow_index != NOT_FOUND) {
-
+            int len;
             unsigned char hit_data[HIT_DATA_LENGTH];
 
             snprintf((char*)hit_data, sizeof(hit_data), "%d %d %d",
@@ -92,7 +89,7 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
                     cache_result->data_offset,
                     cache_result->data_size);
 
-            printk("[High-Flow-Cache] [INFO]: hook_func - Hit data: %s\n", hit_data);
+            //printk("[High-Flow-Cache] [DEBUG]: hook_func - Hit data: %s\n", hit_data);
 
             skb_trim(skb, ip_hdrlen(skb) + tcp_hdrlen(skb) + HIT_DATA_LENGTH);
             iph->tot_len = htons((unsigned short)skb->len);
@@ -101,7 +98,7 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
             adjust_tcp_res_bits(tcp_hdr(skb), IS_HIT);
 
             tcph->check  = htons(0);
-            int len      = skb->len - ip_hdrlen(skb);
+            len          = skb->len - ip_hdrlen(skb);
             tcph->check  = tcp_v4_check(len,
                                        iph->saddr,
                                        iph->daddr,
@@ -109,7 +106,7 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
             iph->check   = htons(0);
             iph->check   = ip_fast_csum((unsigned char *)iph, iph->ihl);
 
-            printk("[High-Flow-Cache] [INFO]: hook_func - Packet %u was sent\n", seq);
+            //printk("[High-Flow-Cache] [DEBUG]: hook_func - Packet %u was sent\n", seq);
         }
         kfree(cache_result);
     }
@@ -136,13 +133,9 @@ int init_func(void) {
 
 
 void exit_func(void) {
-    print_cache_data(cache);
+    //print_cache_data(cache);
     
-    printk("[High-Flow-Cache] [INFO]: exit_func - Total hitrate: %d\n",
-           get_hitrate(cache));
-    printk("[High-Flow-Cache] [INFO]: exit_func - Saved traffic part: %d\n",
-           get_saved_traffic_part(cache));
-
+    print_cache_statistics(cache);
     clean_cache(cache);
     kfree(cache);
 

@@ -18,7 +18,7 @@ struct tcp_flow {
 struct packet {
     struct list_head list;
     unsigned int sequence_number;
-    const unsigned char *payload;
+    unsigned char *payload;
     unsigned int payload_size;
 };
 

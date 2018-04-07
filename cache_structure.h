@@ -33,7 +33,7 @@ struct hit_data* add_to_cache(struct cache *cache,
         const unsigned char *payload,
         int payload_size);
 
-int u_strstr(struct tcp_flow *flow, unsigned char *payload, int payload_size);
+int u_strstr(struct tcp_flow *flow, const unsigned char *payload, int payload_size);
 
 struct hit_data* find_payload(const unsigned char *payload, int payload_size);
 
@@ -47,6 +47,8 @@ void print_cache_data(struct cache *c);
 void print_payload(const unsigned char *payload,
         int payload_size,
         unsigned int seq);
+
+void print_cache_statistics(struct cache *c);
 
 int get_hitrate(struct cache *c);
 
